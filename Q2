@@ -1,0 +1,90 @@
+# CONSIDER USING THE JUPYTER NOTEBOOK WITH R-SERVER KERNEL (NEVER R-SAGE KERNEL)
+foo <- read.csv("https://course-resources.minerva.kgi.edu/uploaded_files/mke/00086677-3767/peace.csv")
+
+# remove 2 rows with missing data (there are better ways to handle missing data)
+foo <- foo[c(-19, -47), ]
+
+# check that all missing data is gone...
+#which(is.na(foo) == TRUE)
+
+# take a peek at the data set (identify the columns)
+#head(foo)
+
+
+##We run Logistic Regressions with and without interaction term, which we will then compare
+
+no_int_glm <- glm(pbs2s3 ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                    treaty + develop + exp + decade + untype4, data = foo, family = binomial)
+#summary(no_int_glm)
+
+
+int_glm <- glm(pbs2s3 ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                 treaty + develop + exp + decade + untype4 + wardur*untype4, data = foo, family = binomial)
+#summary(int_glm)
+
+#This looping part I got help for, but I understand everything that it does:
+df.names<- c('wartype','logcost','wardur', 'factnum', 'factnum2','trnsfcap',
+             'treaty','develop','exp', 'decade','untype4')
+
+
+df.treat<- data.frame(row.names=1:320)
+df.control<- data.frame(row.names=1:320)
+
+#This for loops variable of interest (wardur) through each value and keeps the rest at their means.
+#This gets treatment effects at different levels of war duration.
+
+for (i in df.names) {
+  if (i== 'wardur'){
+    df.treat<- cbind(df.treat, 1:320)
+    df.control<- cbind(df.control, 1:320)}
+  
+  else if (i== 'untype4'){
+    df.treat<- cbind(df.treat, rep(1,320))
+    df.control<- cbind(df.control, rep(0,320))
+  }
+  
+  else{
+    df.treat<- cbind(df.treat, rep(mean(foo[,i]), 320))
+    df.control<- cbind(df.control, rep(mean(foo[,i]), 320))}
+}
+
+#We create pretty and well-named data frames to store our values
+
+names(df.treat)<- df.names
+names(df.control)<- df.names
+
+#View(df.treat)
+#View(df.control)
+
+
+
+#Calculate the predictions for the treatment and control
+#The type="response" argument returns the predicted probabilities directly instead of in a log scale.
+
+no_int_pred.treat= predict(no_int_glm, newdata = df.treat, type = "response") 
+no_int_pred.control=predict(no_int_glm, newdata = df.control, type = "response")
+no_int_difference = no_int_pred.treat - no_int_pred.control
+#print(no_int_difference)
+
+
+int_pred.treat= predict.glm(int_glm, newdata = df.treat, type = "response")
+int_pred.control=predict.glm(int_glm, newdata = df.control, type = "response")
+int_difference = int_pred.treat - int_pred.control
+#print(int_difference)
+
+
+#Replicate Figure 8 from paper (using same texts and legend)
+
+plot(df.treat$wardur, no_int_difference, type="l", lty= 3,
+     main= "Causal Effect of Multidimensional UN Peacekeeping Operations",
+     ylab= "Marginal effects of UN peacekeeping operations",
+     xlab = "Duration of war in months",
+     ylim = c(0.0, 0.8))
+
+lines(df.treat$wardur,int_difference, type= "l", lty= 1)
+
+legend(140, 0.5, legend=c("Dotted: Original Model"),
+       lty=3, cex=0.5)
+
+legend(30, 0.2, legend=c("Model with Interaction Term"),
+       lty=1, cex=0.5)
