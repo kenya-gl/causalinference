@@ -1,0 +1,174 @@
+library(foreign)
+library(Matching)
+library(rgenoud)
+
+foo <- read.csv("https://course-resources.minerva.kgi.edu/uploaded_files/mke/00086677-3767/peace.csv")
+
+######Remove rows with missing data 
+
+which(is.na(foo$pbs2l) == TRUE)
+
+which(is.na(foo$pbs5l) == TRUE)
+
+foo <- foo[c(-4, -16,-19, -47,-84,-93,-98), ]
+
+####Tr as defined
+
+Tr <- rep(0, length(foo$untype))
+Tr[which(foo$untype != "None")] <- 1
+
+
+#####Outcomes are pbs2l and pbs5l
+
+#################################
+####Simple Logistic Regression:
+#################################
+
+glm_2l<- glm(pbs2l ~ Tr + wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+             + untype4 + treaty + develop + exp + decade, data=foo, family=binomial)
+#summary(glm_2l)
+
+#####define treatment and control and find treatment effect:
+
+foo_treat <- foo[which(foo$Tr == 1),]
+foo_cntrl <- foo[which(foo$Tr == 0),]
+#pred_treat_2l <- predict(glm_2l, foo_treat, type="response")
+#pred_cntrl_2l <- predict(glm_2l, foo_cntrl, type="response")
+#effect_2l <- mean(pred_treat_2l) - mean(pred_cntrl_2l)
+#effect_2l
+
+#######Same but for 5 years:
+
+glm_5l<- glm(pbs5l ~ Tr + wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+             + untype4 + treaty + develop + exp + decade, data=foo, family=binomial)
+#summary(glm_5l)
+
+#pred_treat_5l <- predict(glm_5l, foo_treat, type="response")
+#pred_cntrl_5l <- predict(glm_5l, foo_cntrl, type="response")
+#effect_5l <- mean(pred_treat_5l) - mean(pred_cntrl_5l)
+#effect_5l
+
+
+#############################
+###Propensity Score Matching
+#############################
+
+prop_score_glm <- glm(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                     + treaty + develop + exp + decade, data=foo, family=binomial)
+
+Tr = Tr
+X = prop_score_glm$fitted
+Y2 = foo$pbs2l
+
+#####We only run matching with the Y after we have reached good balance. This way, we don't hack the results.
+
+mout2 <- Match(Tr=Tr, X=X, Y = Y2, replace=TRUE)
+summary(mout2)
+
+mb_2l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                      + treaty + develop + exp + decade, data=foo, match.out=mout2,
+                      nboots=300)
+
+
+adjust_bias_2l <- Match(Y=Y2, Tr=Tr, X=X, BiasAdjust=TRUE, replace=TRUE)
+
+summary(adjust_bias_2l)
+
+mb_bias_adj_2l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                               + treaty + develop + exp + decade, data=foo, match.out=adjust_bias_2l,
+                               nboots=300)
+
+######For 5 years, we simply change the Y and do the same:
+
+prop_score_glm <- glm(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                      + treaty + develop + exp + decade, data=foo, family=binomial)
+
+Y5 = foo$pbs5l
+
+mout5 <- Match(Tr=Tr, X=X, Y = Y5, replace=TRUE)
+summary(mout5)
+
+mb_5l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                      + treaty + develop + exp + decade, data=foo, match.out=mout5,
+                      nboots=300)
+
+
+adjust_bias_5l <- Match(Y=Y5, Tr=Tr, X=X, BiasAdjust=TRUE, replace=TRUE)
+
+summary(adjust_bias_5l)
+
+mb_bias_adj_5l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap
+                      + treaty + develop + exp + decade, data=foo, match.out=adjust_bias_5l,
+                      nboots=300)
+
+
+
+
+which(is.na(foo$pbs2l) == TRUE)
+
+which(is.na(foo$pbs5l) == TRUE)
+
+foo <- foo[c(-4, -16,-19, -47,-84,-93,-98), ]
+
+####Tr as defined
+
+Tr <- rep(0, length(foo$untype))
+Tr[which(foo$untype != "None")] <- 1
+
+Tr = Tr
+X = prop_score_glm$fitted
+Y2 = foo$pbs2l
+Y5 = foo$pbs5l
+
+####################
+##GENETIC MATCHING
+####################
+
+Tr = Tr
+X_gen <- cbind(foo$wartype, foo$logcost, foo$wardur, foo$factnum, foo$factnum2,
+               foo$trnsfcap, foo$treaty, foo$develop, foo$exp, foo$decade)
+Y2 = Y2
+
+genout_2l <- GenMatch(Tr = Tr, X = X_gen, estimand = "ATT", M = 2, 
+                     pop.size = 200, max.generations=25)
+
+genmout_2l <- Match(Tr = Tr, X=X_gen, estimand="ATT", Weight.matrix=genout_2l,
+                    M=2, replace=TRUE)
+summary(genmout_2l)
+
+gen_mb_2l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                            treaty + develop + exp + decade, data=foo, 
+                          match.out=genmout_2l, nboots=300)
+
+gen_bias_adj_2l <- Match(Y=Y2, Tr=Tr, X=X_gen, estimand="ATT",
+                         Weight.matrix=genout_2l, M=2, BiasAdjust=TRUE, replace=TRUE)
+summary(gen_bias_adj_2l)
+
+gen_bias_mb_2l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                                treaty + develop + exp + decade, data=foo, 
+                              match.out=gen_bias_adj_2l, nboots=300)
+
+###Same but for 5 years:
+
+Tr = Tr
+X_gen = X_gen
+Y5 = Y5
+
+genout_5l <- GenMatch(Tr = Tr, X = X_gen, estimand = "ATT", M = 3, 
+                      pop.size = 200, max.generations=25)
+
+genmout_5l <- Match(Tr = Tr, X=X_gen, estimand="ATT", Weight.matrix=genout_5l,
+                    M=3, replace=TRUE)
+summary(genmout_5l)
+
+gen_mb_5l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                            treaty + develop + exp + decade, data=foo, 
+                          match.out=genmout_5l, nboots=300)
+
+gen_bias_adj_5l <- Match(Y=Y2, Tr=Tr, X=X_gen, estimand="ATT",
+                         Weight.matrix=genout_5l, M=2, BiasAdjust=TRUE, replace=TRUE)
+summary(gen_bias_adj_5l)
+
+gen_bias_mb_5l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
+                                 treaty + develop + exp + decade, data=foo, 
+                               match.out=gen_bias_adj_5l, nboots=300)
