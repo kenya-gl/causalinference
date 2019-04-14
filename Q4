@@ -154,11 +154,11 @@ Tr = Tr
 X_gen = X_gen
 Y5 = Y5
 
-genout_5l <- GenMatch(Tr = Tr, X = X_gen, estimand = "ATT", M = 3, 
+genout_5l <- GenMatch(Tr = Tr, X = X_gen, estimand = "ATT", M = 2, 
                       pop.size = 200, max.generations=25)
 
 genmout_5l <- Match(Tr = Tr, X=X_gen, estimand="ATT", Weight.matrix=genout_5l,
-                    M=3, replace=TRUE)
+                    M=2, replace=TRUE)
 summary(genmout_5l)
 
 gen_mb_5l <- MatchBalance(Tr ~ wartype + logcost + wardur + factnum + factnum2 + trnsfcap + 
